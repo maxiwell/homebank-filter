@@ -1,7 +1,10 @@
+import click
 import xml.etree.ElementTree as ET
 import numpy as np
 import pyparsing as pp
 import sys
+
+from filters import get_query_by_filter_name
 
 from datetime import datetime, timedelta
 
@@ -150,7 +153,7 @@ def avaliar_expressao(transacao, root, parsed_query):
 
     return avaliar(parsed_query)
 
-def buscar_transacoes(root, query):
+def run_query(root, query):
     parser = criar_parser()
     try:
         parsed_query = parser.parseString(query, parseAll=True)[0]
@@ -165,16 +168,26 @@ def buscar_transacoes(root, query):
 
     return transacoes
 
-if __name__ == "__main__":
+@click.command()
+@click.option('-f', "--filter", help="Saved filter to apply")
+@click.option('-q', "--query", help="JQL like query to filter transactions")
+def commands(filter, query):
     arquivo = "Gastos.xhb"  # Substitua pelo caminho correto do arquivo
     root = carregar_dados(arquivo)
+    if root is None:
+        print("homebank xhb file is empty")
+        sys.exit(1)
 
-    if root is not None:
-        # Exemplo de consulta JQL-like
-        #query = sys.argv[1]
-        #query = "((descricao ~ 'pix' AND valor >= 150) AND valor <= 200)"
-        query = "(descricao ~ 'pix' AND (valor == 15 OR valor == 200)) AND ! descricao ~ 'guilher'"
-        #query = "descricao ~ 'MOBILE PAG TIT BANCO 481' AND data < '01/2025'"
-        resultado = buscar_transacoes(root, query)
-        for r in resultado:
-            print(r)
+    if filter is not None:
+        query = get_query_by_filter_name(filter)
+
+    elif query is not None:
+        query = query
+
+    trans = run_query(root, query)
+    for i in trans:
+        print(i)
+    pass
+
+if __name__ == '__main__':
+    commands()

@@ -1,1 +1,2 @@
 *.xhb
+__pycache__/*
