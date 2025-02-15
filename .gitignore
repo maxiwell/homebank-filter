@@ -1,2 +1,4 @@
 *.xhb
 __pycache__/*
+*.json
+*.csv

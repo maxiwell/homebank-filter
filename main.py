@@ -1,8 +1,12 @@
+#!/bin/env python3
+# -*- coding: utf-8 -*-
+
 import click
 import xml.etree.ElementTree as ET
 import numpy as np
 import pyparsing as pp
 import sys
+import csv
 
 from filters import get_query_by_filter_name
 
@@ -168,26 +172,53 @@ def run_query(root, query):
 
     return transacoes
 
+def convert_to_csv(dados, arquivo_csv):
+    # Escrevendo os dados no arquivo CSV
+    with open(arquivo_csv, mode='w', newline='', encoding='utf-8') as arquivo:
+        escritor_csv = csv.DictWriter(arquivo, fieldnames=dados[0].keys())
+        escritor_csv.writeheader()
+        escritor_csv.writerows(dados)
+
+    print(f"Arquivo '{arquivo_csv}' gerado com sucesso!")
+
+
 @click.command()
 @click.option('-f', "--filter", help="Saved filter to apply")
+@click.option('-l', "--list", is_flag=True, help="List all filters")
 @click.option('-q', "--query", help="JQL like query to filter transactions")
-def commands(filter, query):
-    arquivo = "Gastos.xhb"  # Substitua pelo caminho correto do arquivo
-    root = carregar_dados(arquivo)
-    if root is None:
-        print("homebank xhb file is empty")
-        sys.exit(1)
-
+@click.option('--csv', help="Save the output in a csv file")
+def commands(filter, list, query, csv):
     if filter is not None:
         query = get_query_by_filter_name(filter)
 
     elif query is not None:
         query = query
 
+    elif list is not None:
+        for key, value in get_query_by_filter_name(None).items():
+            print(key + ":")
+            print("    " + value)
+            print()
+        sys.exit(0)
+
+    arquivo = "Gastos.xhb"  # Substitua pelo caminho correto do arquivo
+    root = carregar_dados(arquivo)
+
+    if root is None:
+        print("homebank xhb file is empty")
+        sys.exit(1)
+
     trans = run_query(root, query)
-    for i in trans:
-        print(i)
-    pass
+    if csv is not None:
+        convert_to_csv(trans, csv)
+    else:
+        for i in trans:
+            print(i)
+
 
 if __name__ == '__main__':
+    if (len(sys.argv) < 2):
+        print("usage: main.py --help")
+        sys.exit(1)
+
     commands()
