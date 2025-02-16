@@ -7,6 +7,7 @@ import numpy as np
 import pyparsing as pp
 import sys
 import csv
+import json
 
 from filters import get_query_by_filter_name
 
@@ -61,7 +62,7 @@ def carregar_dados(arquivo):
         return None
 
 def criar_parser():
-    campo = pp.oneOf("descricao valor categoria data")
+    campo = pp.oneOf("descricao valor categoria data tags account")
 
     operador = pp.oneOf("= >= <= < > == != <> ~")
     not_op = pp.oneOf("NOT not !")
@@ -88,19 +89,30 @@ def criar_parser():
 def get_contexto(transacao, root):
     descricao_trans = transacao.get("wording", "").lower()
     valor = transacao.get("amount", "")
+    account = transacao.get("account", "")
     categoria = transacao.get("category", "")
     date = transacao.get("date", "")
+    tags = transacao.get("tags", "")
 
     date = ts_to_date(int(date), "%d/%m/%Y")
 
     cat = root.find(f".//cat[@key='{categoria}']")
     if cat is not None:
         categoria = cat.get("name")
+        parent = cat.get("parent", None)
+        if parent is not None:
+            categoria = root.find(f".//cat[@key='{parent}']").get("name") + ":" + categoria
+
+    acc = root.find(f".//account[@key='{account}']")
+    if acc is not None:
+        account = acc.get("name")
 
     return {"data": date,
+            "account": account,
             "categoria": categoria,
             "descricao": descricao_trans,
-            "valor": valor}
+            "valor": valor,
+            "tags": tags}
 
 
 def avaliar_expressao(transacao, root, parsed_query):
@@ -137,9 +149,12 @@ def avaliar_expressao(transacao, root, parsed_query):
             op_dir      = date_to_ts(op_dir)
         elif (isinstance(op_dir, float)):
             campo_valor = float(campo_valor)
+        else:
+            campo_valor = campo_valor.lower()
+            op_dir = op_dir.lower()
 
         if operador == "~":
-            return op_dir.lower() in campo_valor
+            return op_dir in campo_valor
         elif operador == "=" or operador == "==":
             return campo_valor == op_dir
         elif operador == "!=" or operador == "<>":
@@ -163,14 +178,29 @@ def run_query(root, query):
         parsed_query = parser.parseString(query, parseAll=True)[0]
     except pp.ParseException as e:
         print(f"Erro ao interpretar query: {e}")
-        return []
+        return [], {}
 
-    transacoes = []
-    for transacao in root.findall("ope"):
-        if avaliar_expressao(transacao, root, parsed_query):
-            transacoes.append(get_contexto(transacao, root))
+    all_transactions = []
+    consolidate = {}
+    for trans in root.findall("ope"):
+        if avaliar_expressao(trans, root, parsed_query):
+            context = get_contexto(trans, root)
+            all_transactions.append(context)
 
-    return transacoes
+            consolidate['total_transacoes'] = consolidate.get('total_transacoes', 0) + 1
+            consolidate['total_valor'] = consolidate.get('total_valor', 0) + float(context['valor'])
+
+            categoria = context['categoria']
+            total_by_cat = consolidate.get('total_categoria', {})
+            total_by_cat[categoria] = total_by_cat.get(categoria, 0) + float(context['valor'])
+            consolidate['total_categoria'] = total_by_cat
+
+            account = context['account']
+            total_by_acc = consolidate.get('total_account', {})
+            total_by_acc[account] = total_by_acc.get(account, 0) + float(context['valor'])
+            consolidate['total_account'] = total_by_acc
+
+    return all_transactions, consolidate
 
 def convert_to_csv(dados, arquivo_csv):
     # Escrevendo os dados no arquivo CSV
@@ -208,12 +238,14 @@ def commands(filter, list, query, csv):
         print("homebank xhb file is empty")
         sys.exit(1)
 
-    trans = run_query(root, query)
+    trans, consolidate_fields = run_query(root, query)
     if csv is not None:
         convert_to_csv(trans, csv)
     else:
         for i in trans:
             print(i)
+
+    print(json.dumps(consolidate_fields, indent=4, ensure_ascii=False))
 
 
 if __name__ == '__main__':
