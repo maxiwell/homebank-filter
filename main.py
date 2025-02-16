@@ -172,6 +172,12 @@ def avaliar_expressao(transacao, root, parsed_query):
 
     return avaliar(parsed_query)
 
+def calculate_totalizer(key, context, totalizer):
+    total_by_key = totalizer.get(key, {})
+    key_value = context[key]
+    total_by_key[key_value] = total_by_key.get(key_value, 0) + float(context['valor'])
+    return total_by_key
+
 def run_query(root, query):
     parser = criar_parser()
     try:
@@ -181,26 +187,19 @@ def run_query(root, query):
         return [], {}
 
     all_transactions = []
-    consolidate = {}
+    totalizer = {}
     for trans in root.findall("ope"):
         if avaliar_expressao(trans, root, parsed_query):
             context = get_contexto(trans, root)
             all_transactions.append(context)
 
-            consolidate['total_transacoes'] = consolidate.get('total_transacoes', 0) + 1
-            consolidate['total_valor'] = consolidate.get('total_valor', 0) + float(context['valor'])
+            totalizer['total_transacoes'] = totalizer.get('total_transacoes', 0) + 1
+            totalizer['total_valor'] = totalizer.get('total_valor', 0) + float(context['valor'])
 
-            categoria = context['categoria']
-            total_by_cat = consolidate.get('total_categoria', {})
-            total_by_cat[categoria] = total_by_cat.get(categoria, 0) + float(context['valor'])
-            consolidate['total_categoria'] = total_by_cat
+            totalizer['total_categoria'] = calculate_totalizer('categoria', context, totalizer)
+            totalizer['total_account'] = calculate_totalizer('account', context, totalizer)
 
-            account = context['account']
-            total_by_acc = consolidate.get('total_account', {})
-            total_by_acc[account] = total_by_acc.get(account, 0) + float(context['valor'])
-            consolidate['total_account'] = total_by_acc
-
-    return all_transactions, consolidate
+    return all_transactions, totalizer
 
 def convert_to_csv(dados, arquivo_csv):
     # Escrevendo os dados no arquivo CSV
@@ -211,41 +210,73 @@ def convert_to_csv(dados, arquivo_csv):
 
     print(f"Arquivo '{arquivo_csv}' gerado com sucesso!")
 
+def select_columns(all_transactions, columns):
+    ret_trans = []
+    columns_to_show = columns.split(",") if columns else None
+    if columns_to_show:
+        for i in all_transactions:
+            i_selected_columns = {}
+            for col in columns_to_show:
+                try:
+                    col = col.strip()
+                    i_selected_columns[col] = i[col]
+                except KeyError:
+                    print(f"Columns'{col}' not found!")
+                    sys.exit(1)
 
-@click.command()
-@click.option('-f', "--filter", help="Saved filter to apply")
-@click.option('-l', "--list", is_flag=True, help="List all filters")
-@click.option('-q', "--query", help="JQL like query to filter transactions")
-@click.option('--csv', help="Save the output in a csv file")
-def commands(filter, list, query, csv):
-    if filter is not None:
-        query = get_query_by_filter_name(filter)
+            ret_trans.append(i_selected_columns)
+    else:
+        ret_trans = all_transactions
 
-    elif query is not None:
-        query = query
+    return ret_trans
 
-    elif list is not None:
-        for key, value in get_query_by_filter_name(None).items():
-            print(key + ":")
-            print("    " + value)
-            print()
-        sys.exit(0)
 
-    arquivo = "Gastos.xhb"  # Substitua pelo caminho correto do arquivo
-    root = carregar_dados(arquivo)
+def load_xhb_file(file):
+    root = carregar_dados(file)
 
     if root is None:
         print("homebank xhb file is empty")
         sys.exit(1)
 
-    trans, consolidate_fields = run_query(root, query)
+    return root
+
+@click.command()
+@click.option('-l', "--list", default=None, is_flag=True, help="List all saved filters")
+@click.option('-f', "--filter", help="Saved filter to apply")
+@click.option('-q', "--query", help="JQL like query to filter transactions")
+@click.option('-c', "--columns", help="Columns to show in the output")
+@click.option('--csv', help="Save the output in a csv file")
+def commands(list, filter, query, columns, csv):
+
+    if filter is not None:
+        query = get_query_by_filter_name(filter)
+
+    if query is not None:
+        query = query
+
+    if list is not None:
+        for key, value in get_query_by_filter_name(None).items():
+            print(f"{key}:\n    {value}\n")
+        sys.exit(0)
+
+    if columns:
+        if not query and not filter:
+            raise click.UsageError("Mandatory '-f' or '-q' with '-c'")
+            sys.exit(1)
+
+    root = load_xhb_file("Gastos.xhb")
+
+    print('query:', query)
+    trans, amount_totalized = run_query(root, query)
+    trans = select_columns(trans, columns)
+
     if csv is not None:
         convert_to_csv(trans, csv)
     else:
         for i in trans:
             print(i)
 
-    print(json.dumps(consolidate_fields, indent=4, ensure_ascii=False))
+    print(json.dumps(amount_totalized, indent=4, ensure_ascii=False))
 
 
 if __name__ == '__main__':
