@@ -46,6 +46,10 @@ def run_query(root, query):
     return all_transactions, totalizers
 
 def convert_to_csv(dados, arquivo_csv):
+    if dados is None or len(dados) == 0:
+        print("Nenhum dado para ser escrito no arquivo CSV!")
+        return
+
     # Escrevendo os dados no arquivo CSV
     with open(arquivo_csv, mode='w', newline='', encoding='utf-8') as arquivo:
         escritor_csv = csv.DictWriter(arquivo, fieldnames=dados[0].keys())
@@ -92,9 +96,17 @@ def get_query_by_filter_name(filter_name):
         with open(json_file, "r") as f:
             filters = json.load(f)
     except (FileNotFoundError, json.JSONDecodeError) as e:
-        printf(f"Error loading filters from {json_file}: {e}")
+        print(f"Error loading filters from {json_file}: {e}")
 
-    return filters.get(filter_name, filters) 
+    if filter_name is None:
+        return filters
+
+    query = filters.get(filter_name, None)
+    if query is None:
+        print(f"Filter '{filter_name}' not found!")
+        sys.exit(1)
+
+    return query
 
 def dt_format(dt):
     return dt.strftime("%d/%m/%Y")
@@ -108,6 +120,12 @@ def magic_words(query):
     first_day_last_month = (first_day_this_month - timedelta(days=1)).replace(day=1)
     last_day_last_month  = first_day_this_month - timedelta(days=1)
 
+    first_day_this_year = today.replace(month=1, day=1)
+    last_day_this_year  = today.replace(month=12, day=31)
+
+    first_day_last_year = today.replace(year=today.year-1, month=1, day=1)
+    last_day_last_year = today.replace(year=today.year-1, month=12, day=31)
+
     replace_magic_words = {
         'today'     : f"date = '{dt_format(today)}'",
         'yesterday' : f"date = '{dt_format(today - timedelta(days=1))}'",
@@ -115,6 +133,8 @@ def magic_words(query):
         'this_month': f"date >= '{dt_format(first_day_this_month)}' and date <= '{dt_format(last_day_this_month)}'",
         'last_month': f"date >= '{dt_format(first_day_last_month)}' and date <= '{dt_format(last_day_last_month)}'",
         'last_30_days': f"date >= '{dt_format(today - timedelta(days=30))}' and date <= '{dt_format(today)}'",
+        'this_year' : f"date >= '{dt_format(first_day_this_year)}' and date <= '{dt_format(last_day_this_year)}'",
+        'last_year' : f"date >= '{dt_format(first_day_last_year)}' and date <= '{dt_format(last_day_last_year)}'",
     }
 
     for key, value in replace_magic_words.items():

@@ -32,9 +32,9 @@ def date_to_ts(date) -> int:
     raise ValueError(f"Invalid date format: {date}")
 
 def build_parse():
-    field = pp.oneOf("memo amount category date tags account acc_type")
+    field = pp.oneOf("memo amount category date tags account acc_type acc_flag")
 
-    operator = pp.oneOf("= >= <= < > == != <> ~ is")
+    operator = pp.oneOf("= >= <= < > == != <> ~ in")
     not_op = pp.oneOf("NOT not !")
     and_op = pp.oneOf("AND and")
     or_op  = pp.oneOf("OR or")
@@ -75,6 +75,8 @@ def get_contexto(transacao, root):
     date = transacao.get("date", "")
     tags = transacao.get("tags", "")
     acc_type = ""
+    acc_flag_int = 0
+    acc_flag_str = ""
 
     date = ts_to_date(int(date), "%d/%m/%Y")
 
@@ -89,6 +91,7 @@ def get_contexto(transacao, root):
     if acc is not None:
         account = acc.get("name")
         acc_type = acc.get("type", "")
+        acc_flag_int = acc.get("flags", 0)
 
     # account type is hard coded in the homebank source code
     if acc_type is not None:
@@ -105,9 +108,18 @@ def get_contexto(transacao, root):
         elif acc_type == "6":
             acc_type = "checking"
 
+    # account flag is hard coded in the homebank source code
+    if acc_flag_int is not None:
+        acc_flag_int = int(acc_flag_int or 0)
+        if (acc_flag_int & (1 << 4)) != 0:
+            acc_flag_str += "hidden;"
+        if (acc_flag_int & (1 << 1)) != 0:
+            acc_flag_str += "closed;"
+
     return {"date": date,
             "account": account,
             "acc_type": acc_type,
+            "acc_flag" : acc_flag_str,
             "category": category,
             "memo": memo,
             "amount": amount,
@@ -148,9 +160,10 @@ def avaliar_expressao(transacao, root, parsed_query):
             op_right    = date_to_ts(op_right)
         elif (isinstance(op_right, float)):
             right_value = float(right_value)
-        elif operator == 'is':
+        elif operator == 'in':
             # convert the string "['word1', 'word2']"" to a real array
-            op_right = ast.literal_eval(str(op_right))
+            op_right = ast.literal_eval(str(op_right).lower())
+            right_value = right_value.lower()
         else:
             right_value = right_value.lower()
             op_right = op_right.lower()
@@ -170,7 +183,17 @@ def avaliar_expressao(transacao, root, parsed_query):
             return right_value > op_right
         elif operator == "<":
             return right_value < op_right
-        elif operator == "is":
+        elif operator == "in":
+            if op_left == "category":
+                for i in right_value.split(":"):
+                    if i in op_right:
+                        return True
+
+            if op_left == "acc_flag":
+                for i in right_value.split(";"):
+                    if i in op_right:
+                        return True
+
             if right_value in op_right:
                 return True
 
