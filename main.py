@@ -40,11 +40,11 @@ def run_query(root, query):
             context = get_contexto(trans, root)
             all_transactions.append(context)
 
-            totalizers['total_transacoes'] = totalizers.get('total_transacoes', 0) + 1
-            totalizers['total_valor'] = totalizers.get('total_valor', 0) + float(context['valor'])
+            totalizers['transacao'] = totalizers.get('transacao', 0) + 1
+            totalizers['valor'] = totalizers.get('valor', 0) + float(context['valor'])
 
-            totalizers['total_categoria'] = calculate_totalizer('categoria', context, totalizers)
-            totalizers['total_account'] = calculate_totalizer('account', context, totalizers)
+            totalizers['categoria'] = calculate_totalizer('categoria', context, totalizers)
+            totalizers['account'] = calculate_totalizer('account', context, totalizers)
 
     return all_transactions, totalizers
 
@@ -103,9 +103,10 @@ def get_query_by_filter_name(filter_name):
 @click.option('-l', "--list", default=None, is_flag=True, help="List all saved filters")
 @click.option('-f', "--filter", help="Saved filter to apply")
 @click.option('-q', "--query", help="JQL like query to filter transactions")
+@click.option('-a', "--append", help="Append more conditions in the filter called by '-f'")
 @click.option('-c', "--columns", help="Columns to show in the output")
 @click.option('--csv', help="Save the output in a csv file")
-def commands(list, filter, query, columns, csv):
+def commands(list, filter, append, query, columns, csv):
 
     if filter is not None:
         query = get_query_by_filter_name(filter)
@@ -123,6 +124,13 @@ def commands(list, filter, query, columns, csv):
             raise click.UsageError("Mandatory '-f' or '-q' with '-c'")
             sys.exit(1)
 
+    if append:
+        if not filter:
+            raise click.UsageError("Mandatory '-f' with '-a'")
+            sys.exit(1)
+
+        query = '(' + query + ')' + append
+
     root = load_xhb_file("Gastos.xhb")
 
     print('query:', query)
@@ -135,6 +143,7 @@ def commands(list, filter, query, columns, csv):
         for i in trans:
             print(i)
 
+    print("Totalizers:")
     print(json.dumps(totalizers, indent=4, ensure_ascii=False))
 
 
