@@ -6,32 +6,26 @@ import xml.etree.ElementTree as ET
 import json
 import sys
 
-from parser import criar_parser, avaliar_expressao, get_contexto
+from parser import parse_string, avaliar_expressao, get_contexto
 from datetime import datetime, timedelta
 
-def carregar_dados(arquivo):
+def load_data(file):
     try:
-        tree = ET.parse(arquivo)
+        tree = ET.parse(file)
         root = tree.getroot()
         return root
     except Exception as e:
-        print(f"Erro ao carregar arquivo: {e}")
+        print(f"Error on load data from {file}: {e}")
         return None
 
 def calculate_totalizer(key, context, totalizer):
     total_by_key = totalizer.get(key, {})
     key_value = context[key]
-    total_by_key[key_value] = total_by_key.get(key_value, 0) + float(context['valor'])
+    total_by_key[key_value] = total_by_key.get(key_value, 0) + float(context['amount'])
     return total_by_key
 
 def run_query(root, query):
-    parser = criar_parser()
-
-    try:
-        parsed_query = parser.parseString(query, parseAll=True)[0]
-    except pp.ParseException as e:
-        print(f"Erro ao interpretar query: {e}")
-        return [], {}
+    parsed_query = parse_string(query)
 
     all_transactions = []
     totalizers = {}
@@ -40,12 +34,13 @@ def run_query(root, query):
             context = get_contexto(trans, root)
             all_transactions.append(context)
 
-            totalizers['transacao'] = totalizers.get('transacao', 0) + 1
-            totalizers['valor'] = totalizers.get('valor', 0) + float(context['valor'])
+            totalizers['transactions'] = totalizers.get('transactions', 0) + 1
+            totalizers['amount'] = totalizers.get('amount', 0) + float(context['amount'])
 
-            totalizers['categoria'] = calculate_totalizer('categoria', context, totalizers)
+            totalizers['category'] = calculate_totalizer('category', context, totalizers)
             totalizers['account'] = calculate_totalizer('account', context, totalizers)
 
+    all_transactions = sorted(all_transactions, key=lambda x: x['date'])
     return all_transactions, totalizers
 
 def convert_to_csv(dados, arquivo_csv):
@@ -79,7 +74,7 @@ def select_columns(all_transactions, columns):
 
 
 def load_xhb_file(file):
-    root = carregar_dados(file)
+    root = load_data(file)
 
     if root is None:
         print("homebank xhb file is empty")

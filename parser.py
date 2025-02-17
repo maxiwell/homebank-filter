@@ -29,60 +29,69 @@ def date_to_ts(date) -> int:
             return converted_date
         except ValueError:
             continue
-    raise ValueError(f"Formato de data inválido: {date}")
+    raise ValueError(f"Invalid date format: {date}")
 
+def build_parse():
+    campo = pp.oneOf("memo amount category date tags account")
 
-def criar_parser():
-    campo = pp.oneOf("descricao valor categoria data tags account")
-
-    operador = pp.oneOf("= >= <= < > == != <> ~")
+    operator = pp.oneOf("= >= <= < > == != <> ~")
     not_op = pp.oneOf("NOT not !")
     and_op = pp.oneOf("AND and")
     or_op = pp.oneOf("OR or")
 
-    valor_str = pp.QuotedString("'")
-    valor_num = pp.Word(pp.nums + ".").setParseAction(lambda t: float(t[0]))
+    amount_str = pp.QuotedString("'")
+    amount_num = pp.Word(pp.nums + ".").setParseAction(lambda t: float(t[0]))
 
-    valor = valor_str | valor_num
+    amount = amount_str | amount_num
 
-    expressao = pp.Group(campo + operador + valor)
+    exp = pp.Group(campo + operator + amount)
 
-    condicao = pp.infixNotation(expressao, [
+    cond = pp.infixNotation(exp, [
         (not_op, 1, pp.opAssoc.RIGHT),
         (and_op, 2, pp.opAssoc.LEFT),
         (or_op, 2, pp.opAssoc.LEFT),
-        (operador, 2, pp.opAssoc.LEFT)
+        (operator, 2, pp.opAssoc.LEFT)
     ], lpar=pp.Suppress("("), rpar=pp.Suppress(")"))
 
-    return condicao
+    return cond
+
+def parse_string(query):
+    parser = build_parse()
+    try:
+        parsed_query = parser.parseString(query, parseAll=True)[0]
+        return parsed_query
+    except pp.ParseException as e:
+        print(f"Erro ao interpretar query: {e}")
+        sys.exit(1)
+
 
 
 def get_contexto(transacao, root):
-    descricao_trans = transacao.get("wording", "").lower()
-    valor = transacao.get("amount", "")
+    memo = transacao.get("wording", "").lower()
+    amount = transacao.get("amount", "")
     account = transacao.get("account", "")
-    categoria = transacao.get("category", "")
+    category = transacao.get("category", "")
     date = transacao.get("date", "")
     tags = transacao.get("tags", "")
 
     date = ts_to_date(int(date), "%d/%m/%Y")
 
-    cat = root.find(f".//cat[@key='{categoria}']")
+    cat = root.find(f".//cat[@key='{category}']")
     if cat is not None:
-        categoria = cat.get("name")
+        category = cat.get("name")
         parent = cat.get("parent", None)
         if parent is not None:
-            categoria = root.find(f".//cat[@key='{parent}']").get("name") + ":" + categoria
+            category = root.find(f".//cat[@key='{parent}']").get("name") + ":" + category
 
     acc = root.find(f".//account[@key='{account}']")
     if acc is not None:
         account = acc.get("name")
 
-    return {"data": date,
+    return {"date": date,
             "account": account,
-            "categoria": categoria,
-            "descricao": descricao_trans,
-            "valor": valor,
+            "category": category,
+            "memo": memo,
+            "amount": amount,
             "tags": tags}
 
 
@@ -99,45 +108,45 @@ def avaliar_expressao(transacao, root, parsed_query):
             parsed = parsed[0:2] + [avaliar(parsed[2:])]
 
         if (len(parsed) == 3):
-            op_esq, operador, op_dir = parsed
+            op_left, operator, op_right = parsed
         elif (len(parsed) == 2):
-            operador, op_dir = parsed
+            operator, op_right = parsed
 
         # special operators
-        if operador.upper() == "NOT" or operador == "!":
-            return not avaliar(op_dir)
-        elif operador.upper() == "AND":
-            return avaliar(op_esq) and avaliar(op_dir)
-        elif operador.upper() == "OR":
-            return avaliar(op_esq) or avaliar(op_dir)
+        if operator.upper() == "NOT" or operator == "!":
+            return not avaliar(op_right)
+        elif operator.upper() == "AND":
+            return avaliar(op_left) and avaliar(op_right)
+        elif operator.upper() == "OR":
+            return avaliar(op_left) or avaliar(op_right)
 
-        # campo_valor has the right side value from homebank file
-        campo_valor = contexto.get(op_esq, "")
+        # right_value has the right side value from homebank file
+        right_value = contexto.get(op_left, "")
 
         # semantic exceptions
-        if (op_esq == "data"):
-            campo_valor = date_to_ts(campo_valor)
-            op_dir      = date_to_ts(op_dir)
-        elif (isinstance(op_dir, float)):
-            campo_valor = float(campo_valor)
+        if (op_left == "date"):
+            right_value = date_to_ts(right_value)
+            op_right      = date_to_ts(op_right)
+        elif (isinstance(op_right, float)):
+            right_value = float(right_value)
         else:
-            campo_valor = campo_valor.lower()
-            op_dir = op_dir.lower()
+            right_value = right_value.lower()
+            op_right = op_right.lower()
 
-        if operador == "~":
-            return op_dir in campo_valor
-        elif operador == "=" or operador == "==":
-            return campo_valor == op_dir
-        elif operador == "!=" or operador == "<>":
-            return campo_valor != op_dir
-        elif operador == ">=":
-            return campo_valor >= op_dir
-        elif operador == "<=":
-            return campo_valor <= op_dir
-        elif operador == ">":
-            return campo_valor > op_dir
-        elif operador == "<":
-            return campo_valor < op_dir
+        if operator == "~":
+            return op_right in right_value
+        elif operator == "=" or operator == "==":
+            return right_value == op_right
+        elif operator == "!=" or operator == "<>":
+            return right_value != op_right
+        elif operator == ">=":
+            return right_value >= op_right
+        elif operator == "<=":
+            return right_value <= op_right
+        elif operator == ">":
+            return right_value > op_right
+        elif operator == "<":
+            return right_value < op_right
 
         return False
 
