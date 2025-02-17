@@ -1,15 +1,13 @@
 {
     "inter_cc":
-        "(account ~ 'Inter CC')",
+        "(account = 'Inter CC')",
     "invest_cash_flow":
         "acc_type = 'asset'",
     "gastos_cartoes":
         "acc_type = 'credit card' AND NOT acc_flag in ['hidden', 'closed'] AND category != 'Cartao'",
-    "gastos_cartoes_wo_list":
-        "acc_type = 'credit card' AND NOT (acc_flag ~ 'hidden' OR acc_flag ~ 'closed') AND category != 'Cartao'",
     "google_sheet":
         "category in ['carro', 'comida', 'mercado'] AND NOT (tags = 'conag')",
-    "google_sheet_wo_list":
-        "(category ~ 'carro' OR category ~ 'comida' OR category ~ 'mercado') AND NOT (tags = 'conag')"
+    "google_sheet_conag":
+        "tags = 'conag'"
 
 }
