@@ -1,6 +1,6 @@
 {
-    "filtro_a":
-        "((descricao ~ 'pix' AND valor >= 150) AND valor <= 200)",
+    "inter_cc":
+        "(account ~ 'Inter CC')",
 
     "filtro_b":
         "(descricao ~ 'pix' AND (valor == 15 OR valor == 200)) AND ! descricao ~ 'guilher'",

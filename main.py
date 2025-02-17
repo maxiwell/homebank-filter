@@ -5,6 +5,7 @@ import click
 import xml.etree.ElementTree as ET
 import json
 import sys
+import calendar
 
 from parser import parse_string, avaliar_expressao, get_contexto
 from datetime import datetime, timedelta
@@ -94,6 +95,32 @@ def get_query_by_filter_name(filter_name):
 
     return filters.get(filter_name, filters) 
 
+def dt_format(dt):
+    return dt.strftime("%d/%m/%Y")
+
+def magic_words(query):
+    today = datetime.today()
+
+    first_day_this_month = today.replace(day=1)
+    last_day_this_month  = today.replace(day=calendar.monthrange(today.year, today.month)[1])
+
+    first_day_last_month = (first_day_this_month - timedelta(days=1)).replace(day=1)
+    last_day_last_month  = first_day_this_month - timedelta(days=1)
+
+    replace_magic_words = {
+        'today'     : f"date = '{dt_format(today)}'",
+        'yesterday' : f"date = '{dt_format(today - timedelta(days=1))}'",
+        'tomorrow'  : f"date = '{dt_format(today + timedelta(days=1))}'",
+        'this_month': f"date >= '{dt_format(first_day_this_month)}' and date <= '{dt_format(last_day_this_month)}'",
+        'last_month': f"date >= '{dt_format(first_day_last_month)}' and date <= '{dt_format(last_day_last_month)}'",
+        'last_30_days': f"date >= '{dt_format(today - timedelta(days=30))}' and date <= '{dt_format(today)}'",
+    }
+
+    for key, value in replace_magic_words.items():
+        query = query.replace('{' + key + '}', value)
+
+    return query
+
 @click.command()
 @click.option('-l', "--list", default=None, is_flag=True, help="List all saved filters")
 @click.option('-f', "--filter", help="Saved filter to apply")
@@ -124,9 +151,11 @@ def commands(list, filter, append, query, columns, csv):
             raise click.UsageError("Mandatory '-f' with '-a'")
             sys.exit(1)
 
-        query = '(' + query + ')' + append
+        query = '(' + query + ') ' + append
 
     root = load_xhb_file("Gastos.xhb")
+
+    query = magic_words(query)
 
     print('query:', query)
     trans, totalizers = run_query(root, query)
@@ -139,7 +168,15 @@ def commands(list, filter, append, query, columns, csv):
             print(i)
 
     print("Totalizers:")
-    print(json.dumps(totalizers, indent=4, ensure_ascii=False))
+
+    try:
+        sorted_category = dict(sorted(totalizers["category"].items(), key=lambda x: x[0]))
+        totalizers["category"] = sorted_category
+    except KeyError:
+        totalizers = {}
+
+    json_dump = json.dumps(totalizers, indent=4, ensure_ascii=False)
+    print(json_dump)
 
 
 if __name__ == '__main__':
