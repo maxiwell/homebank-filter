@@ -2,7 +2,7 @@ import numpy as np
 import pyparsing as pp
 import sys
 import csv
-import json
+import json, ast
 from datetime import datetime, timedelta
 
 # Converte um timestamp baseado em dias desde 0000-01-01 para uma data no formato YYYY-MM-DD.
@@ -32,19 +32,20 @@ def date_to_ts(date) -> int:
     raise ValueError(f"Invalid date format: {date}")
 
 def build_parse():
-    campo = pp.oneOf("memo amount category date tags account")
+    field = pp.oneOf("memo amount category date tags account")
 
-    operator = pp.oneOf("= >= <= < > == != <> ~")
+    operator = pp.oneOf("= >= <= < > == != <> ~ is")
     not_op = pp.oneOf("NOT not !")
     and_op = pp.oneOf("AND and")
-    or_op = pp.oneOf("OR or")
+    or_op  = pp.oneOf("OR or")
 
-    amount_str = pp.QuotedString("'")
-    amount_num = pp.Word(pp.nums + ".").setParseAction(lambda t: float(t[0]))
+    value_str = pp.QuotedString("'")
+    value_num = pp.Word(pp.nums + ".").setParseAction(lambda t: float(t[0]))
+    value_list = pp.Suppress("[") + pp.Group(pp.delimitedList(pp.QuotedString("'"))) + pp.Suppress("]") 
 
-    amount = amount_str | amount_num
+    value = value_str | value_num | value_list
 
-    exp = pp.Group(campo + operator + amount)
+    exp = pp.Group(field + operator + value)
 
     cond = pp.infixNotation(exp, [
         (not_op, 1, pp.opAssoc.RIGHT),
@@ -126,12 +127,16 @@ def avaliar_expressao(transacao, root, parsed_query):
         # semantic exceptions
         if (op_left == "date"):
             right_value = date_to_ts(right_value)
-            op_right      = date_to_ts(op_right)
+            op_right    = date_to_ts(op_right)
         elif (isinstance(op_right, float)):
             right_value = float(right_value)
+        elif operator == 'is':
+            # convert the string "['word1', 'word2']"" to a real array
+            op_right = ast.literal_eval(str(op_right))
         else:
             right_value = right_value.lower()
             op_right = op_right.lower()
+
 
         if operator == "~":
             return op_right in right_value
@@ -147,6 +152,9 @@ def avaliar_expressao(transacao, root, parsed_query):
             return right_value > op_right
         elif operator == "<":
             return right_value < op_right
+        elif operator == "is":
+            if right_value in op_right:
+                return True
 
         return False
 

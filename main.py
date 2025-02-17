@@ -6,6 +6,7 @@ import xml.etree.ElementTree as ET
 import json
 import sys
 import calendar
+import csv
 
 from parser import parse_string, avaliar_expressao, get_contexto
 from datetime import datetime, timedelta
