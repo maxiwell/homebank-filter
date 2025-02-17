@@ -32,7 +32,7 @@ def date_to_ts(date) -> int:
     raise ValueError(f"Invalid date format: {date}")
 
 def build_parse():
-    field = pp.oneOf("memo amount category date tags account")
+    field = pp.oneOf("memo amount category date tags account acc_type")
 
     operator = pp.oneOf("= >= <= < > == != <> ~ is")
     not_op = pp.oneOf("NOT not !")
@@ -74,6 +74,7 @@ def get_contexto(transacao, root):
     category = transacao.get("category", "")
     date = transacao.get("date", "")
     tags = transacao.get("tags", "")
+    acc_type = ""
 
     date = ts_to_date(int(date), "%d/%m/%Y")
 
@@ -87,9 +88,26 @@ def get_contexto(transacao, root):
     acc = root.find(f".//account[@key='{account}']")
     if acc is not None:
         account = acc.get("name")
+        acc_type = acc.get("type", "")
+
+    # account type is hard coded in the homebank source code
+    if acc_type is not None:
+        if acc_type == "1":
+            acc_type = "bank"
+        elif acc_type == "2":
+            acc_type = "cash"
+        elif acc_type == "3":
+            acc_type = "asset"
+        elif acc_type == "4":
+            acc_type = "credit card"
+        elif acc_type == "5":
+            acc_type = "liability"
+        elif acc_type == "6":
+            acc_type = "checking"
 
     return {"date": date,
             "account": account,
+            "acc_type": acc_type,
             "category": category,
             "memo": memo,
             "amount": amount,
