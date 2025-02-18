@@ -2,7 +2,7 @@
     "inter_cc":
         "(account = 'Inter CC')",
     "invest_cash_flow":
-        "acc_type = 'asset'",
+        "acc_type = 'asset' and not (category ~ 'Rendimento') and {this_year}",
     "gastos_cartoes":
         "acc_type = 'credit card' AND NOT acc_flag in ['hidden', 'closed'] AND category != 'Cartao'",
     "google_sheet":

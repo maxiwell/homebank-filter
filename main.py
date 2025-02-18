@@ -7,6 +7,7 @@ import json
 import sys
 import calendar
 import csv
+import re
 
 from parser import parse_string, avaliar_expressao, get_contexto
 from datetime import datetime, timedelta
@@ -42,7 +43,7 @@ def run_query(root, query):
             totalizers['category'] = calculate_totalizer('category', context, totalizers)
             totalizers['account'] = calculate_totalizer('account', context, totalizers)
 
-    all_transactions = sorted(all_transactions, key=lambda x: x['date'])
+    all_transactions = sorted(all_transactions, key=lambda x: datetime.strptime(x['date'], "%d/%m/%Y"))
     return all_transactions, totalizers
 
 def convert_to_csv(dados, arquivo_csv):
@@ -148,8 +149,9 @@ def magic_words(query):
 @click.option('-q', "--query", help="JQL like query to filter transactions")
 @click.option('-a', "--append", help="Append more conditions in the filter called by '-f'")
 @click.option('-c', "--columns", help="Columns to show in the output")
+@click.option('-r', "--replace", help="Replace the first magic work")
 @click.option('--csv', help="Save the output in a csv file")
-def commands(list, filter, append, query, columns, csv):
+def commands(list, filter, append, query, columns, replace, csv):
 
     if filter is not None:
         query = get_query_by_filter_name(filter)
@@ -174,6 +176,12 @@ def commands(list, filter, append, query, columns, csv):
 
         query = '(' + query + ') ' + append
 
+    if replace:
+        if not filter:
+            raise click.UsageError("Mandatory '-f' with '-r'")
+            sys.exit(1)
+        query = re.sub(r'{.*}', replace, query)
+
     root = load_xhb_file("Gastos.xhb")
 
     query = magic_words(query)
@@ -192,7 +200,13 @@ def commands(list, filter, append, query, columns, csv):
 
     try:
         sorted_category = dict(sorted(totalizers["category"].items(), key=lambda x: x[0]))
-        totalizers["category"] = sorted_category
+        rounded_sorted_category = {k: round(v, 2) for k, v in sorted_category.items()}
+        rounded_account = {k: round(v, 2) for k, v in totalizers["account"].items()}
+        rounded_amount  = round(totalizers["amount"], 2)
+
+        totalizers["category"] = rounded_sorted_category
+        totalizers["account"]  = rounded_account
+        totalizers["amount"]   = rounded_amount
     except KeyError:
         totalizers = {}
 
